@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">REX VPN</string>
+    <string name="app_tagline">THE POWER BEHIND THE SHADOW</string>
+    <string name="status_ready">جاهز للاتصال</string>
+    <string name="status_connecting">جاري الاتصال...</string>
+    <string name="status_connected">متصل</string>
+    <string name="status_disconnected">غير متصل</string>
+    <string name="connect">اتصال</string>
+    <string name="disconnect">قطع الاتصال</string>
+    <string name="servers">السيرفرات</string>
+    <string name="configs">الكونفيجات</string>
+    <string name="time_rewards">الوقت والمكافآت</string>
+    <string name="statistics">الإحصائيات</string>
+    <string name="settings">الإعدادات</string>
+    <string name="about">حول التطبيق</string>
+    <string name="free_time">رصيد الوقت المجاني</string>
+    <string name="upload">رفع</string>
+    <string name="download">تحميل</string>
+</resources>
