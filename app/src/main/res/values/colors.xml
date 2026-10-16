@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="rex_background">#080812</color>
+    <color name="rex_surface">#121222</color>
+    <color name="rex_surface_light">#1C1C32</color>
+    <color name="rex_purple">#9B5CFF</color>
+    <color name="rex_purple_dark">#6428C8</color>
+    <color name="rex_cyan">#00E5FF</color>
+    <color name="rex_text">#FFFFFF</color>
+    <color name="rex_text_secondary">#A5A5BC</color>
+    <color name="rex_success">#35E59A</color>
+    <color name="rex_error">#FF4567</color>
+    <color name="rex_warning">#FFC857</color>
+</resources>
