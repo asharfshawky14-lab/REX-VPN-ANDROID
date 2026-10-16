@@ -9,6 +9,8 @@
     <application
         android:allowBackup="false"
         android:label="@string/app_name"
+        android:icon="@drawable/rex_icon"
+        android:roundIcon="@drawable/rex_icon"
         android:theme="@style/REXTheme"
         android:usesCleartextTraffic="false">
 
