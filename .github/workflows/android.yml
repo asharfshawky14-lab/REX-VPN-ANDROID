@@ -4,11 +4,14 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - main
       - rex-vpn-protocols
+
+permissions:
+  contents: read
 
 jobs:
   build:
+    name: Build Android APK
     runs-on: ubuntu-latest
 
     steps:
@@ -21,8 +24,13 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
       - name: Build debug APK
-        run: gradle assembleDebug --stacktrace --info
+        run: gradle assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
