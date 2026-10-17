@@ -17,7 +17,10 @@ public final class ProtocolCatalog {
         public final String protocol;
         public final String message;
 
-        Detection(Engine engine, String protocol, String message) {
+        Detection(
+                Engine engine,
+                String protocol,
+                String message) {
             this.engine = engine;
             this.protocol = protocol;
             this.message = message;
@@ -32,23 +35,25 @@ public final class ProtocolCatalog {
             return result(
                     Engine.UNKNOWN,
                     "غير معروف",
-                    "اختار ملفًا أو الصق رابط الكونفيج أولًا."
+                    "اختار ملف أو الصق رابط الكونفيج الأول."
             );
         }
 
         String value = input.trim();
         String lower = value.toLowerCase(Locale.ROOT);
 
+        // WireGuard configuration
         if ((lower.contains("[interface]")
                 && lower.contains("[peer]"))
                 || lower.startsWith("wireguard://")) {
             return result(
                     Engine.WIREGUARD,
                     "WireGuard",
-                    "تم التعرف على صيغة WireGuard؛ يلزم التحقق من الملف."
+                    "تم التعرف على صيغة WireGuard."
             );
         }
 
+        // Sing-box protocols
         if (lower.startsWith("vless://")) {
             return singBox("VLESS");
         }
@@ -83,16 +88,18 @@ public final class ProtocolCatalog {
             return singBox("SOCKS");
         }
 
+        // An HTTP/HTTPS URL is not necessarily a proxy.
         if (lower.startsWith("http://")
                 || lower.startsWith("https://")) {
             return result(
                     Engine.UNKNOWN,
                     "HTTP/HTTPS",
-                    "الرابط قد يكون موقعًا عاديًا أو بروكسي؛ "
-                            + "لا يمكن تحديد النوع من البداية وحدها."
+                    "الرابط ممكن يكون موقعًا عاديًا أو بروكسي HTTP؛ "
+                            + "لازم نتحقق من نوعه."
             );
         }
 
+        // OpenVPN configuration
         if (lower.contains("<openvpn")
                 || (lower.contains("client")
                 && lower.contains("remote ")
@@ -100,25 +107,26 @@ public final class ProtocolCatalog {
             return result(
                     Engine.OPENVPN,
                     "OpenVPN",
-                    "تم التعرف مبدئيًا على OpenVPN؛ "
-                            + "يلزم محركه للتحقق والتشغيل."
+                    "تم التعرف مبدئيًا على OpenVPN، "
+                            + "لكن محرك تشغيله غير مدمج حتى الآن."
             );
         }
 
+        // IKEv2/IPsec configuration
         if (lower.contains("ikev2")
                 || lower.contains("ipsec")) {
             return result(
                     Engine.IKEV2,
                     "IKEv2/IPsec",
-                    "قد تكون إعدادات IKEv2/IPsec؛ "
-                            + "تحتاج إلى التحقق من الصيغة."
+                    "تم التعرف مبدئيًا على IKEv2/IPsec؛ "
+                            + "يلزم دعم محركه وإعداداته."
             );
         }
 
         return result(
                 Engine.UNKNOWN,
                 "غير معروف",
-                "لم يتم التعرف على نوع الكونفيج."
+                "لم نتمكن من التعرف على نوع الكونفيج."
         );
     }
 
@@ -126,8 +134,9 @@ public final class ProtocolCatalog {
         return result(
                 Engine.SING_BOX,
                 protocol,
-                "تم التعرف على النوع فقط؛ "
-                        + "التشغيل يتطلب محركًا مدمجًا وإعدادًا صالحًا."
+                "تم التعرف على نوع البروتوكول؛ "
+                        + "التشغيل يعتمد على دعم التحويل "
+                        + "وصحة إعدادات الاتصال."
         );
     }
 
