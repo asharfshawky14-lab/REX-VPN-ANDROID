@@ -1,4 +1,3 @@
-
 package com.ashraf.rexvpn;
 
 import java.util.Locale;
@@ -30,23 +29,23 @@ public final class ProtocolCatalog {
 
     public static Detection detect(String input) {
         if (input == null || input.trim().isEmpty()) {
-            return new Detection(
+            return result(
                     Engine.UNKNOWN,
                     "غير معروف",
-                    "اختار ملفًا أو الصق رابط كونفيج أولًا."
+                    "اختار ملفًا أو الصق رابط الكونفيج أولًا."
             );
         }
 
         String value = input.trim();
         String lower = value.toLowerCase(Locale.ROOT);
 
-        if (lower.startsWith("wireguard://")
-                || lower.contains("[interface]")
-                && lower.contains("[peer]")) {
-            return new Detection(
+        if ((lower.contains("[interface]")
+                && lower.contains("[peer]"))
+                || lower.startsWith("wireguard://")) {
+            return result(
                     Engine.WIREGUARD,
                     "WireGuard",
-                    "تم التعرف على صيغة WireGuard."
+                    "تم التعرف على صيغة WireGuard؛ يلزم التحقق من الملف."
             );
         }
 
@@ -75,59 +74,67 @@ public final class ProtocolCatalog {
             return singBox("TUIC");
         }
 
-        if (lower.startsWith("socks://")
-                || lower.startsWith("socks5://")
-                || lower.startsWith("http://")
-                || lower.startsWith("https://")) {
-            return singBox("Proxy");
-        }
-
-        if (lower.startsWith("ssh://")) {
-            return singBox("SSH");
-        }
-
         if (lower.startsWith("anytls://")) {
             return singBox("AnyTLS");
         }
 
+        if (lower.startsWith("socks://")
+                || lower.startsWith("socks5://")) {
+            return singBox("SOCKS");
+        }
+
+        if (lower.startsWith("http://")
+                || lower.startsWith("https://")) {
+            return result(
+                    Engine.UNKNOWN,
+                    "HTTP/HTTPS",
+                    "الرابط قد يكون موقعًا عاديًا أو بروكسي؛ "
+                            + "لا يمكن تحديد النوع من البداية وحدها."
+            );
+        }
+
         if (lower.contains("<openvpn")
-                || lower.contains("client")
+                || (lower.contains("client")
                 && lower.contains("remote ")
-                && lower.contains("dev tun")) {
-            return new Detection(
+                && lower.contains("dev tun"))) {
+            return result(
                     Engine.OPENVPN,
                     "OpenVPN",
-                    "يبدو أنه ملف OpenVPN؛ يحتاج إلى محرك OpenVPN."
+                    "تم التعرف مبدئيًا على OpenVPN؛ "
+                            + "يلزم محركه للتحقق والتشغيل."
             );
         }
 
         if (lower.contains("ikev2")
                 || lower.contains("ipsec")) {
-            return new Detection(
+            return result(
                     Engine.IKEV2,
                     "IKEv2/IPsec",
-                    "قد يكون إعداد IKEv2/IPsec؛ يلزم التحقق من صيغة الإعداد."
+                    "قد تكون إعدادات IKEv2/IPsec؛ "
+                            + "تحتاج إلى التحقق من الصيغة."
             );
         }
 
-        if (lower.startsWith("https://")
-                && (lower.contains("clash")
-                || lower.contains("sing-box"))) {
-            return singBox("اشتراك أو إعداد sing-box");
-        }
-
-        return new Detection(
+        return result(
                 Engine.UNKNOWN,
                 "غير معروف",
-                "لم يتم التعرف على الصيغة تلقائيًا."
+                "لم يتم التعرف على نوع الكونفيج."
         );
     }
 
     private static Detection singBox(String protocol) {
-        return new Detection(
+        return result(
                 Engine.SING_BOX,
                 protocol,
-                "تم التعرف على النوع مبدئيًا؛ يجب التحقق من الإعداد وتشغيل المحرك."
+                "تم التعرف على النوع فقط؛ "
+                        + "التشغيل يتطلب محركًا مدمجًا وإعدادًا صالحًا."
         );
+    }
+
+    private static Detection result(
+            Engine engine,
+            String protocol,
+            String message) {
+        return new Detection(engine, protocol, message);
     }
 }
