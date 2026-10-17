@@ -1,4 +1,3 @@
-
 package com.ashraf.rexvpn;
 
 import android.app.Notification;
@@ -9,13 +8,8 @@ import android.net.VpnService;
 import android.os.Build;
 import android.os.IBinder;
 
-/**
- * نقطة البداية لخدمة Sing-box في REX VPN.
- *
- * ملاحظة: الخدمة تجهّز هيكل التشغيل فقط حاليًا.
- * لم يتم ربط CommandServer أو واجهة TUN الخاصة بمكتبة
- * libbox بعد، ولذلك لا تنشئ نفق Sing-box فعليًا حتى الآن.
- */
+import org.json.JSONObject;
+
 public final class SingBoxVpnService extends VpnService {
 
     public static final String ACTION_START =
@@ -23,6 +17,12 @@ public final class SingBoxVpnService extends VpnService {
 
     public static final String ACTION_STOP =
             "com.ashraf.rexvpn.action.SINGBOX_STOP";
+
+    public static final String EXTRA_CONFIG =
+            "com.ashraf.rexvpn.extra.SINGBOX_CONFIG";
+
+    public static final String EXTRA_RESULT =
+            "com.ashraf.rexvpn.extra.SINGBOX_RESULT";
 
     private static final String CHANNEL_ID = "rex_singbox_vpn";
     private static final int NOTIFICATION_ID = 7301;
@@ -48,14 +48,48 @@ public final class SingBoxVpnService extends VpnService {
             return START_NOT_STICKY;
         }
 
-        if (ACTION_START.equals(action)) {
-            startForeground(
-                    NOTIFICATION_ID,
-                    buildNotification()
-            );
+        if (!ACTION_START.equals(action)) {
+            stopSelf(startId);
+            return START_NOT_STICKY;
+        }
 
-            // لا يبدأ اتصالًا فعليًا حتى دمج libbox
-            // والتحقق من إعداداته وواجهة TUN.
+        startForeground(NOTIFICATION_ID, buildNotification(
+                "جاري فحص إعدادات الاتصال"));
+
+        String configText = intent.getStringExtra(EXTRA_CONFIG);
+
+        try {
+            if (configText == null || configText.trim().isEmpty()) {
+                throw new IllegalArgumentException(
+                        "لم يتم إرسال إعدادات Sing-box.");
+            }
+
+            JSONObject config = SingBoxConfigBuilder.fromJson(configText);
+
+            // لا نعلن نجاح الاتصال قبل دمج محرك libbox الفعلي.
+            String result = "تم فحص بنية الإعدادات فقط. "
+                    + "محرك Sing-box لم يبدأ النفق بعد.";
+
+            Intent response = new Intent(EXTRA_RESULT);
+            response.setPackage(getPackageName());
+            response.putExtra(EXTRA_RESULT, result);
+            sendBroadcast(response);
+
+            stopForeground(true);
+            stopSelf(startId);
+
+        } catch (Exception e) {
+            String message = e.getMessage();
+
+            if (message == null || message.trim().isEmpty()) {
+                message = "تعذر فحص إعدادات Sing-box.";
+            }
+
+            Intent response = new Intent(EXTRA_RESULT);
+            response.setPackage(getPackageName());
+            response.putExtra(EXTRA_RESULT, "خطأ: " + message);
+            sendBroadcast(response);
+
             stopForeground(true);
             stopSelf(startId);
         }
@@ -71,9 +105,7 @@ public final class SingBoxVpnService extends VpnService {
                     NotificationManager.IMPORTANCE_LOW
             );
 
-            channel.setDescription(
-                    "إشعارات خدمة VPN"
-            );
+            channel.setDescription("إشعارات خدمة REX VPN");
 
             NotificationManager manager =
                     getSystemService(NotificationManager.class);
@@ -84,7 +116,7 @@ public final class SingBoxVpnService extends VpnService {
         }
     }
 
-    private Notification buildNotification() {
+    private Notification buildNotification(String message) {
         Notification.Builder builder;
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -95,8 +127,8 @@ public final class SingBoxVpnService extends VpnService {
 
         return builder
                 .setContentTitle("REX VPN")
-                .setContentText("خدمة Sing-box قيد التجهيز")
-                .setSmallIcon(android.R.drawable.stat_sys_warning)
+                .setContentText(message)
+                .setSmallIcon(android.R.drawable.stat_sys_download_done)
                 .setOngoing(true)
                 .build();
     }
