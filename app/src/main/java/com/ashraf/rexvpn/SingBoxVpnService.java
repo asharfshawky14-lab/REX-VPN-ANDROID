@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.net.VpnService;
 import android.os.Build;
 import android.os.IBinder;
+import android.util.Log;
 
 import org.json.JSONObject;
 
@@ -40,61 +41,68 @@ public final class SingBoxVpnService extends VpnService {
             return START_NOT_STICKY;
         }
 
-        String action = intent.getAction();
-
-        if (ACTION_STOP.equals(action)) {
+        if (ACTION_STOP.equals(intent.getAction())) {
             stopForeground(true);
+            stopSelf();
+            sendResult("تم إيقاف الخدمة.");
+            return START_NOT_STICKY;
+        }
+
+        if (!ACTION_START.equals(intent.getAction())) {
             stopSelf(startId);
             return START_NOT_STICKY;
         }
 
-        if (!ACTION_START.equals(action)) {
-            stopSelf(startId);
-            return START_NOT_STICKY;
-        }
-
-        startForeground(NOTIFICATION_ID, buildNotification(
-                "جاري فحص إعدادات الاتصال"));
+        startForeground(
+                NOTIFICATION_ID,
+                buildNotification("جاري تجهيز اتصال Sing-box")
+        );
 
         String configText = intent.getStringExtra(EXTRA_CONFIG);
 
         try {
             if (configText == null || configText.trim().isEmpty()) {
                 throw new IllegalArgumentException(
-                        "لم يتم إرسال إعدادات Sing-box.");
+                        "إعدادات الاتصال فارغة."
+                );
             }
 
-            JSONObject config = SingBoxConfigBuilder.fromJson(configText);
+            JSONObject config =
+                    SingBoxConfigBuilder.fromJson(configText);
 
-            // لا نعلن نجاح الاتصال قبل دمج محرك libbox الفعلي.
-            String result = "تم فحص بنية الإعدادات فقط. "
-                    + "محرك Sing-box لم يبدأ النفق بعد.";
+            // الفحص هنا فقط؛ تشغيل المحرك الفعلي يحتاج
+            // CommandServer وPlatformInterface وفتح نفق TUN.
+            Log.i("REX-SINGBOX",
+                    "Configuration validated: "
+                            + config.optJSONArray("outbounds"));
 
-            Intent response = new Intent(EXTRA_RESULT);
-            response.setPackage(getPackageName());
-            response.putExtra(EXTRA_RESULT, result);
-            sendBroadcast(response);
-
-            stopForeground(true);
-            stopSelf(startId);
+            sendResult(
+                    "الإعدادات سليمة، لكن المحرك الفعلي لم يبدأ بعد."
+            );
 
         } catch (Exception e) {
             String message = e.getMessage();
 
             if (message == null || message.trim().isEmpty()) {
-                message = "تعذر فحص إعدادات Sing-box.";
+                message = "تعذر تجهيز إعدادات الاتصال.";
             }
 
-            Intent response = new Intent(EXTRA_RESULT);
-            response.setPackage(getPackageName());
-            response.putExtra(EXTRA_RESULT, "خطأ: " + message);
-            sendBroadcast(response);
+            Log.e("REX-SINGBOX", "Startup failed", e);
+            sendResult("خطأ: " + message);
 
+        } finally {
             stopForeground(true);
             stopSelf(startId);
         }
 
         return START_NOT_STICKY;
+    }
+
+    private void sendResult(String message) {
+        Intent response = new Intent(EXTRA_RESULT);
+        response.setPackage(getPackageName());
+        response.putExtra(EXTRA_RESULT, message);
+        sendBroadcast(response);
     }
 
     private void createNotificationChannel() {
@@ -128,7 +136,9 @@ public final class SingBoxVpnService extends VpnService {
         return builder
                 .setContentTitle("REX VPN")
                 .setContentText(message)
-                .setSmallIcon(android.R.drawable.stat_sys_download_done)
+                .setSmallIcon(
+                        android.R.drawable.stat_sys_download_done
+                )
                 .setOngoing(true)
                 .build();
     }
