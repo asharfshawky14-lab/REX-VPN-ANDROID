@@ -917,7 +917,24 @@ public class MainActivity extends Activity {
                 "REX VPN", 27, CYAN, true);
 
         appName.setGravity(Gravity.CENTER);
+        
         aboutCard.addView(appName, lp(-1, dp(60)));
+
+        ImageView identityImage = new ImageView(this);
+        int identityId = getResources().getIdentifier(
+                "rex_identity", "drawable", getPackageName());
+
+        if (identityId != 0) {
+            identityImage.setImageResource(identityId);
+            identityImage.setScaleType(ImageView.ScaleType.FIT_CENTER);
+
+            LinearLayout.LayoutParams identityParams =
+                    lp(-1, dp(150));
+
+            identityParams.bottomMargin = dp(12);
+            aboutCard.addView(identityImage, identityParams);
+        }
+
 
         TextView aboutText = text(
                 "تطبيق لإدارة اتصال WireGuard.\n\n"
