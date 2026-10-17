@@ -1,3 +1,4 @@
+
 package com.ashraf.rexvpn;
 
 import android.app.Notification;
@@ -10,28 +11,26 @@ import android.os.IBinder;
 import android.os.ParcelFileDescriptor;
 import android.util.Log;
 
-import org.json.JSONObject;
-
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
-import java.util.Iterator;
 
 import io.nekohasekai.libbox.CommandServer;
 import io.nekohasekai.libbox.CommandServerHandler;
-import io.nekohasekai.libbox.Libbox;
 import io.nekohasekai.libbox.OverrideOptions;
 import io.nekohasekai.libbox.PlatformInterface;
-import io.nekohasekai.libbox.SystemProxyStatus;
 
 public final class SingBoxVpnService extends VpnService {
 
     public static final String ACTION_START =
             "com.ashraf.rexvpn.action.SINGBOX_START";
+
     public static final String ACTION_STOP =
             "com.ashraf.rexvpn.action.SINGBOX_STOP";
+
     public static final String EXTRA_CONFIG =
             "com.ashraf.rexvpn.extra.SINGBOX_CONFIG";
+
     public static final String EXTRA_RESULT =
             "com.ashraf.rexvpn.extra.SINGBOX_RESULT";
 
@@ -42,7 +41,7 @@ public final class SingBoxVpnService extends VpnService {
     private CommandServer commandServer;
     private ParcelFileDescriptor tunDescriptor;
     private String currentConfig;
-    private boolean engineStarted;
+    private boolean stopping;
 
     @Override
     public void onCreate() {
@@ -51,7 +50,11 @@ public final class SingBoxVpnService extends VpnService {
     }
 
     @Override
-    public int onStartCommand(Intent intent, int flags, int startId) {
+    public int onStartCommand(
+            Intent intent,
+            int flags,
+            int startId
+    ) {
         if (intent == null || intent.getAction() == null) {
             stopSelf(startId);
             return START_NOT_STICKY;
@@ -68,6 +71,7 @@ public final class SingBoxVpnService extends VpnService {
         }
 
         String config = intent.getStringExtra(EXTRA_CONFIG);
+
         if (config == null || config.trim().isEmpty()) {
             sendResult("خطأ: الكونفيج فارغ.");
             stopSelf(startId);
@@ -75,20 +79,23 @@ public final class SingBoxVpnService extends VpnService {
         }
 
         try {
-            JSONObject parsed = SingBoxConfigBuilder.fromJson(config);
-            currentConfig = parsed.toString();
+            currentConfig = SingBoxConfigBuilder
+                    .fromJson(config)
+                    .toString();
+
+            stopping = false;
 
             startForeground(
                     NOTIFICATION_ID,
-                    buildNotification("جاري تشغيل محرك Sing-box")
+                    buildNotification("جاري تشغيل Sing-box...")
             );
 
             startEngine(currentConfig);
-            engineStarted = true;
+
             sendResult("تم إرسال الكونفيج إلى محرك Sing-box.");
 
         } catch (Exception e) {
-            Log.e(TAG, "Sing-box startup failed", e);
+            Log.e(TAG, "Unable to start Sing-box", e);
             sendResult("فشل تشغيل Sing-box: " + safeMessage(e));
             stopEngine();
         }
@@ -96,14 +103,16 @@ public final class SingBoxVpnService extends VpnService {
         return START_NOT_STICKY;
     }
 
-    private synchronized void startEngine(String config) throws Exception {
+    private synchronized void startEngine(String config)
+            throws Exception {
+
         if (VpnService.prepare(this) != null) {
             throw new IllegalStateException(
                     "إذن VPN غير ممنوح. وافق على طلب الاتصال أولًا."
             );
         }
 
-        stopCommandServer();
+        closeCommandServer();
 
         PlatformInterface platform = createPlatformInterface();
         CommandServerHandler handler = createCommandHandler();
@@ -117,22 +126,49 @@ public final class SingBoxVpnService extends VpnService {
                     new OverrideOptions()
             );
         } catch (Exception e) {
-            stopCommandServer();
+            closeCommandServer();
             throw e;
         }
     }
 
     private PlatformInterface createPlatformInterface() {
-        InvocationHandler invocation = (proxy, method, args) -> {
+        InvocationHandler handler = (proxy, method, args) -> {
             String name = method.getName();
 
-            if ("toString".equals(name)) return "REX Sing-box Platform";
-            if ("hashCode".equals(name)) return System.identityHashCode(proxy);
-            if ("equals".equals(name)) return proxy == args[0];
+            if ("toString".equals(name)) {
+                return "REX VPN Platform";
+            }
+
+            if ("hashCode".equals(name)) {
+                return System.identityHashCode(proxy);
+            }
+
+            if ("equals".equals(name)) {
+                return proxy == args[0];
+            }
+
+            if ("openTun".equals(name)) {
+                if (args == null || args.length == 0) {
+                    throw new IllegalArgumentException(
+                            "Sing-box لم يرسل إعدادات TUN."
+                    );
+                }
+
+                closeTun();
+
+                tunDescriptor = SingBoxPlatform.establishTun(
+                        SingBoxVpnService.this,
+                        args[0],
+                        "REX VPN"
+                );
+
+                return tunDescriptor.getFd();
+            }
 
             if ("autoDetectInterfaceControl".equals(name)) {
-                if (args != null && args.length > 0) {
-                    protect((Integer) args[0]);
+                if (args != null && args.length > 0
+                        && args[0] instanceof Number) {
+                    protect(((Number) args[0]).intValue());
                 }
                 return null;
             }
@@ -141,13 +177,9 @@ public final class SingBoxVpnService extends VpnService {
                 return true;
             }
 
-            if ("openTun".equals(name)) {
-                return openTunFromOptions(args[0]);
-            }
-
-            if ("useProcFS".equals(name)
-                    || "underNetworkExtension".equals(name)
+            if ("underNetworkExtension".equals(name)
                     || "includeAllNetworks".equals(name)
+                    || "useProcFS".equals(name)
                     || "usePlatformShell".equals(name)
                     || "usePlatformBridge".equals(name)
                     || "usePlatformAutoRedirect".equals(name)) {
@@ -158,24 +190,8 @@ public final class SingBoxVpnService extends VpnService {
                     || "closeDefaultInterfaceMonitor".equals(name)
                     || "clearDNSCache".equals(name)
                     || "registerMyInterface".equals(name)
+                    || "startNeighborMonitor".equals(name)
                     || "closeNeighborMonitor".equals(name)) {
-                return null;
-            }
-
-            if ("getInterfaces".equals(name)) {
-                return emptyIterator(
-                        "io.nekohasekai.libbox.NetworkInterfaceIterator"
-                );
-            }
-
-            if ("findConnectionOwner".equals(name)) {
-                return Class.forName(
-                        "io.nekohasekai.libbox.ConnectionOwner"
-                ).getDeclaredConstructor().newInstance();
-            }
-
-            if ("readWIFIState".equals(name)
-                    || "localDNSTransport".equals(name)) {
                 return null;
             }
 
@@ -188,40 +204,31 @@ public final class SingBoxVpnService extends VpnService {
                 return "";
             }
 
-            if ("startNeighborMonitor".equals(name)) return null;
-
-            if ("lookupUser".equals(name)) {
-                throw new UnsupportedOperationException(
-                        "Platform user lookup is not supported."
-                );
-            }
-
-            if ("openShellSession".equals(name)
-                    || "createBridge".equals(name)
-                    || "createAutoRedirect".equals(name)
-                    || "checkPlatformShell".equals(name)) {
-                throw new UnsupportedOperationException(
-                        "This optional platform feature is unavailable."
-                );
-            }
-
             return defaultValue(method.getReturnType());
         };
 
         return (PlatformInterface) Proxy.newProxyInstance(
                 PlatformInterface.class.getClassLoader(),
                 new Class<?>[]{PlatformInterface.class},
-                invocation
+                handler
         );
     }
 
-    private Object createCommandHandler() {
-        InvocationHandler invocation = (proxy, method, args) -> {
+    private CommandServerHandler createCommandHandler() {
+        InvocationHandler handler = (proxy, method, args) -> {
             String name = method.getName();
 
-            if ("toString".equals(name)) return "REX Sing-box Handler";
-            if ("hashCode".equals(name)) return System.identityHashCode(proxy);
-            if ("equals".equals(name)) return proxy == args[0];
+            if ("toString".equals(name)) {
+                return "REX VPN Command Handler";
+            }
+
+            if ("hashCode".equals(name)) {
+                return System.identityHashCode(proxy);
+            }
+
+            if ("equals".equals(name)) {
+                return proxy == args[0];
+            }
 
             if ("serviceStop".equals(name)) {
                 stopEngine();
@@ -230,201 +237,29 @@ public final class SingBoxVpnService extends VpnService {
 
             if ("serviceReload".equals(name)) {
                 String config = currentConfig;
-                if (config != null) {
+
+                if (config != null && !stopping) {
                     startEngine(config);
                 }
+
                 return null;
-            }
-
-            if ("getSystemProxyStatus".equals(name)) {
-                SystemProxyStatus status = new SystemProxyStatus();
-                status.setAvailable(false);
-                status.setEnabled(false);
-                return status;
-            }
-
-            if ("setSystemProxyEnabled".equals(name)
-                    || "triggerNativeCrash".equals(name)
-                    || "writeDebugMessage".equals(name)) {
-                return null;
-            }
-
-            if ("connectSSHAgent".equals(name)) {
-                return -1;
             }
 
             return defaultValue(method.getReturnType());
         };
 
-        return Proxy.newProxyInstance(
+        return (CommandServerHandler) Proxy.newProxyInstance(
                 CommandServerHandler.class.getClassLoader(),
                 new Class<?>[]{CommandServerHandler.class},
-                invocation
+                handler
         );
-    }
-
-    private int openTunFromOptions(Object options) throws Exception {
-        if (VpnService.prepare(this) != null) {
-            throw new IllegalStateException("إذن VPN غير ممنوح.");
-        }
-
-        int mtu = ((Number) invoke(options, "getMtu")).intValue();
-        android.net.VpnService.Builder builder = new Builder()
-                .setSession("REX VPN")
-                .setMtu(Math.max(1280, Math.min(mtu, 9000)));
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            builder.setMetered(false);
-        }
-
-        addAddresses(builder, invoke(options, "getInet4Address"));
-        addAddresses(builder, invoke(options, "getInet6Address"));
-
-        Object autoRoute = invoke(options, "getAutoRoute");
-        if (Boolean.TRUE.equals(autoRoute)) {
-            Object dnsMode = invoke(options, "getDnsMode");
-            Object dnsServer = invoke(options, "getDnsServerAddress");
-
-            boolean dnsDisabled = false;
-            if (dnsMode != null) {
-                try {
-                    int mode = ((Number) invoke(dnsMode, "value")).intValue();
-                    dnsDisabled = mode == Libbox.DNSModeDisabled;
-                } catch (Exception ignored) {
-                    // Continue using DNS settings from the TUN options.
-                }
-            }
-
-            if (!dnsDisabled) {
-                addDnsServers(builder, dnsServer);
-            }
-
-            addRoutes(builder, options, "getInet4RouteRange", false);
-            addRoutes(builder, options, "getInet6RouteRange", false);
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                addRoutes(builder, options, "getInet4RouteAddress", true);
-                addRoutes(builder, options, "getInet6RouteAddress", true);
-                addRoutes(builder, options, "getInet4RouteExcludeAddress", true);
-                addRoutes(builder, options, "getInet6RouteExcludeAddress", true);
-            }
-        }
-
-        ParcelFileDescriptor descriptor = builder.establish();
-        if (descriptor == null) {
-            throw new IllegalStateException(
-                    "Android رفض إنشاء نفق TUN."
-            );
-        }
-
-        if (tunDescriptor != null) {
-            try {
-                tunDescriptor.close();
-            } catch (Exception ignored) {
-            }
-        }
-
-        tunDescriptor = descriptor;
-        return descriptor.getFd();
-    }
-
-    private void addAddresses(
-            VpnService.Builder builder,
-            Object iterator
-    ) throws Exception {
-        while (hasNext(iterator)) {
-            Object address = next(iterator);
-            String ip = String.valueOf(invoke(address, "address"));
-            int prefix = ((Number) invoke(address, "prefix")).intValue();
-            builder.addAddress(ip, prefix);
-        }
-    }
-
-    private void addDnsServers(
-            VpnService.Builder builder,
-            Object iterator
-    ) throws Exception {
-        while (hasNext(iterator)) {
-            String dns = String.valueOf(next(iterator));
-            if (!dns.isEmpty()) {
-                builder.addDnsServer(dns);
-            }
-        }
-    }
-
-    private void addRoutes(
-            VpnService.Builder builder,
-            Object options,
-            String getter,
-            boolean cidrStrings
-    ) throws Exception {
-        Object iterator;
-        try {
-            iterator = invoke(options, getter);
-        } catch (Exception ignored) {
-            return;
-        }
-
-        if (iterator == null) return;
-
-        while (hasNext(iterator)) {
-            Object route = next(iterator);
-            if (route == null) continue;
-
-            if (cidrStrings) {
-                String cidr = String.valueOf(route);
-                String[] parts = cidr.split("/");
-                if (parts.length == 2) {
-                    int prefix = Integer.parseInt(parts[1]);
-                    if (getter.contains("Exclude")) {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            builder.excludeRoute(
-                                    android.net.IpPrefix.class
-                                            .getConstructor(String.class, int.class)
-                                            .newInstance(parts[0], prefix)
-                            );
-                        }
-                    } else {
-                        builder.addRoute(parts[0], prefix);
-                    }
-                }
-            } else {
-                String ip = String.valueOf(invoke(route, "address"));
-                int prefix = ((Number) invoke(route, "prefix")).intValue();
-                builder.addRoute(ip, prefix);
-            }
-        }
-    }
-
-    private Object emptyIterator(String className) throws Exception {
-        Class<?> type = Class.forName(className);
-        return Proxy.newProxyInstance(
-                type.getClassLoader(),
-                new Class<?>[]{type},
-                (proxy, method, args) -> {
-                    if ("hasNext".equals(method.getName())) return false;
-                    if ("next".equals(method.getName())) return null;
-                    if ("len".equals(method.getName())) return 0;
-                    return defaultValue(method.getReturnType());
-                }
-        );
-    }
-
-    private Object invoke(Object target, String methodName) throws Exception {
-        Method method = target.getClass().getMethod(methodName);
-        return method.invoke(target);
-    }
-
-    private boolean hasNext(Object iterator) throws Exception {
-        return iterator != null && Boolean.TRUE.equals(invoke(iterator, "hasNext"));
-    }
-
-    private Object next(Object iterator) throws Exception {
-        return invoke(iterator, "next");
     }
 
     private Object defaultValue(Class<?> type) {
-        if (!type.isPrimitive() || type == void.class) return null;
+        if (!type.isPrimitive() || type == void.class) {
+            return null;
+        }
+
         if (type == boolean.class) return false;
         if (type == int.class) return 0;
         if (type == long.class) return 0L;
@@ -433,43 +268,63 @@ public final class SingBoxVpnService extends VpnService {
         if (type == short.class) return (short) 0;
         if (type == byte.class) return (byte) 0;
         if (type == char.class) return '\0';
+
         return null;
     }
 
-    private synchronized void stopCommandServer() {
-        if (commandServer != null) {
-            try {
-                commandServer.closeService();
-            } catch (Exception e) {
-                Log.w(TAG, "closeService", e);
-            }
-
-            try {
-                commandServer.close();
-            } catch (Exception e) {
-                Log.w(TAG, "close", e);
-            }
-
-            commandServer = null;
+    private synchronized void closeCommandServer() {
+        if (commandServer == null) {
+            return;
         }
+
+        try {
+            commandServer.closeService();
+        } catch (Exception e) {
+            Log.w(TAG, "Could not close Sing-box service", e);
+        }
+
+        try {
+            commandServer.close();
+        } catch (Exception e) {
+            Log.w(TAG, "Could not close command server", e);
+        }
+
+        commandServer = null;
+    }
+
+    private synchronized void closeTun() {
+        if (tunDescriptor == null) {
+            return;
+        }
+
+        try {
+            tunDescriptor.close();
+        } catch (Exception e) {
+            Log.w(TAG, "Could not close TUN descriptor", e);
+        }
+
+        tunDescriptor = null;
     }
 
     private synchronized void stopEngine() {
-        engineStarted = false;
-        stopCommandServer();
-
-        if (tunDescriptor != null) {
-            try {
-                tunDescriptor.close();
-            } catch (Exception e) {
-                Log.w(TAG, "TUN close", e);
-            }
-            tunDescriptor = null;
+        if (stopping) {
+            return;
         }
 
-        stopForeground(true);
-        stopSelf();
+        stopping = true;
+        currentConfig = null;
+
+        closeCommandServer();
+        closeTun();
+
+        try {
+            stopForeground(true);
+        } catch (Exception e) {
+            Log.w(TAG, "Could not stop foreground notification", e);
+        }
+
         sendResult("تم طلب فصل اتصال Sing-box.");
+        stopSelf();
     }
 
     private void sendResult(String message) {
@@ -480,23 +335,29 @@ public final class SingBoxVpnService extends VpnService {
     }
 
     private void createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel channel = new NotificationChannel(
-                    CHANNEL_ID,
-                    "REX VPN",
-                    NotificationManager.IMPORTANCE_LOW
-            );
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            return;
+        }
 
-            NotificationManager manager =
-                    getSystemService(NotificationManager.class);
-            if (manager != null) manager.createNotificationChannel(channel);
+        NotificationChannel channel = new NotificationChannel(
+                CHANNEL_ID,
+                "REX VPN",
+                NotificationManager.IMPORTANCE_LOW
+        );
+
+        NotificationManager manager =
+                getSystemService(NotificationManager.class);
+
+        if (manager != null) {
+            manager.createNotificationChannel(channel);
         }
     }
 
     private Notification buildNotification(String message) {
-        Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
-                ? new Notification.Builder(this, CHANNEL_ID)
-                : new Notification.Builder(this);
+        Notification.Builder builder =
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                        ? new Notification.Builder(this, CHANNEL_ID)
+                        : new Notification.Builder(this);
 
         return builder
                 .setContentTitle("REX VPN")
@@ -508,9 +369,12 @@ public final class SingBoxVpnService extends VpnService {
 
     private String safeMessage(Exception e) {
         String message = e.getMessage();
-        return message == null || message.trim().isEmpty()
-                ? e.getClass().getSimpleName()
-                : message;
+
+        if (message == null || message.trim().isEmpty()) {
+            return e.getClass().getSimpleName();
+        }
+
+        return message;
     }
 
     @Override
