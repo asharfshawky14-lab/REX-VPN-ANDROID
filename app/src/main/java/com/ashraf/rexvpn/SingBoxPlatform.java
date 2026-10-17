@@ -1,4 +1,3 @@
-
 package com.ashraf.rexvpn;
 
 import android.net.IpPrefix;
@@ -7,6 +6,7 @@ import android.os.Build;
 import android.os.ParcelFileDescriptor;
 
 import java.lang.reflect.Method;
+import java.net.InetAddress;
 
 public final class SingBoxPlatform {
 
@@ -14,10 +14,6 @@ public final class SingBoxPlatform {
         // Utility class.
     }
 
-    /**
-     * Creates the Android TUN interface using options supplied by Sing-box.
-     * The options object is Sing-box's generated TunOptions instance.
-     */
     public static ParcelFileDescriptor establishTun(
             VpnService service,
             Object options,
@@ -222,8 +218,12 @@ public final class SingBoxPlatform {
                 );
             }
 
+            InetAddress address = InetAddress.getByName(
+                    parts[0]
+            );
+
             IpPrefix ipPrefix = new IpPrefix(
-                    parts[0],
+                    address,
                     prefix
             );
 
