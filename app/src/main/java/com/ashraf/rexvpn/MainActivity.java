@@ -339,10 +339,12 @@ public class MainActivity extends Activity {
 
         ImageView wolf = new ImageView(this);
 
+       
         int wolfId = getResources().getIdentifier(
-                "wolf_background",
+                "wolf_background_new",
                 "drawable",
                 getPackageName());
+
 
         if (wolfId != 0) {
             wolf.setImageResource(wolfId);
