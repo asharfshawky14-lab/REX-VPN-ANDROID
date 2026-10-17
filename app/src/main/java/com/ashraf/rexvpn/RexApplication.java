@@ -1,7 +1,6 @@
 package com.ashraf.rexvpn;
 
 import android.app.Application;
-import android.os.Build;
 import android.util.Log;
 
 import java.io.File;
@@ -25,24 +24,24 @@ public class RexApplication extends Application {
 
             if (!baseDir.exists() && !baseDir.mkdirs()) {
                 throw new IllegalStateException(
-                    "Cannot create base directory"
+                        "Cannot create base directory"
                 );
             }
 
             if (!workingDir.exists() && !workingDir.mkdirs()) {
                 throw new IllegalStateException(
-                    "Cannot create Sing-box working directory"
+                        "Cannot create Sing-box working directory"
                 );
             }
 
             if (!tempDir.exists() && !tempDir.mkdirs()) {
                 throw new IllegalStateException(
-                    "Cannot create temporary directory"
+                        "Cannot create temporary directory"
                 );
             }
 
             Libbox.setLocale(
-                Locale.getDefault().toLanguageTag()
+                    Locale.getDefault().toLanguageTag()
             );
 
             SetupOptions options = new SetupOptions();
@@ -56,11 +55,11 @@ public class RexApplication extends Application {
             options.setDebug(BuildConfig.DEBUG);
 
             options.setAppVersion(
-                String.valueOf(BuildConfig.VERSION_CODE)
+                    String.valueOf(BuildConfig.VERSION_CODE)
             );
 
             options.setAppMarketingVersion(
-                BuildConfig.VERSION_NAME
+                    BuildConfig.VERSION_NAME
             );
 
             options.setCrashReportSource("REX VPN");
@@ -69,11 +68,11 @@ public class RexApplication extends Application {
 
             Log.i(TAG, "Sing-box initialized successfully");
 
-        } catch (Exception e) {
+        } catch (Exception | LinkageError e) {
             Log.e(
-                TAG,
-                "Sing-box initialization failed",
-                e
+                    TAG,
+                    "Sing-box initialization failed",
+                    e
             );
         }
     }
