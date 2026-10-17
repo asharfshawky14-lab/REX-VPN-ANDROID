@@ -1,3 +1,4 @@
+
 package com.ashraf.rexvpn;
 
 import android.content.Context;
@@ -25,6 +26,7 @@ public final class VpnManager {
 
     private final Context context;
     private final Backend backend;
+
     private final ExecutorService executor =
             Executors.newSingleThreadExecutor();
 
@@ -38,15 +40,39 @@ public final class VpnManager {
 
     public static synchronized VpnManager getInstance(
             Context context) {
+
         if (instance == null) {
             instance = new VpnManager(context);
         }
+
         return instance;
     }
 
-    public void connect(String configText, Callback callback) {
-        if (configText == null || configText.trim().isEmpty()) {
-            callback.onError("استورد كونفيج WireGuard الأول.");
+    public void connect(
+            String configText,
+            Callback callback) {
+
+        if (configText == null
+                || configText.trim().isEmpty()) {
+            callback.onError(
+                    "استورد ملف الكونفيج أولًا.");
+            return;
+        }
+
+        ProtocolCatalog.Detection detection =
+                ProtocolCatalog.detect(configText);
+
+        if (detection.engine
+                != ProtocolCatalog.Engine.WIREGUARD) {
+
+            callback.onError(
+                    "نوع الكونفيج: " + detection.protocol
+                    + "\n\n"
+                    + "محرك هذا البروتوكول لم يُدمج "
+                    + "ويُختبر بعد في REX VPN."
+                    + "\n\n"
+                    + "لم يتم بدء الاتصال. "
+                    + "جرّب كونفيج WireGuard حاليًا.");
             return;
         }
 
@@ -63,21 +89,25 @@ public final class VpnManager {
                                         StandardCharsets.UTF_8)));
 
                 Tunnel.State state = backend.setState(
-                        tunnel, Tunnel.State.UP, parsed);
+                        tunnel,
+                        Tunnel.State.UP,
+                        parsed);
 
                 if (state == Tunnel.State.UP) {
                     currentConfig = parsed;
+
                     callback.onSuccess(
                             "تم تشغيل نفق WireGuard.");
                 } else {
                     callback.onError(
-                            "لم يؤكد المحرك تشغيل النفق.");
+                            "محرك WireGuard لم يؤكد "
+                            + "تشغيل النفق.");
                 }
 
             } catch (Exception e) {
                 callback.onError(
                         "فشل الاتصال: "
-                                + safeMessage(e));
+                        + safeMessage(e));
             }
         });
     }
@@ -86,15 +116,19 @@ public final class VpnManager {
         executor.execute(() -> {
             try {
                 backend.setState(
-                        tunnel, Tunnel.State.DOWN, null);
+                        tunnel,
+                        Tunnel.State.DOWN,
+                        null);
 
                 currentConfig = null;
-                callback.onSuccess("تم فصل اتصال VPN.");
+
+                callback.onSuccess(
+                        "تم فصل اتصال VPN.");
 
             } catch (Exception e) {
                 callback.onError(
                         "تعذر فصل الاتصال: "
-                                + safeMessage(e));
+                        + safeMessage(e));
             }
         });
     }
@@ -116,17 +150,23 @@ public final class VpnManager {
         }
     }
 
+    public String getCurrentEngine() {
+        return "WireGuard";
+    }
+
     private String safeMessage(Exception e) {
         String message = e.getMessage();
 
-        if (message == null || message.trim().isEmpty()) {
+        if (message == null
+                || message.trim().isEmpty()) {
             return e.getClass().getSimpleName();
         }
 
         return message;
     }
 
-    private static final class TunnelImpl implements Tunnel {
+    private static final class TunnelImpl
+            implements Tunnel {
 
         @Override
         public String getName() {
@@ -135,7 +175,7 @@ public final class VpnManager {
 
         @Override
         public void onStateChange(Tunnel.State state) {
-            // تتم قراءة الحالة الفعلية من محرك WireGuard.
+            // تُقرأ الحالة الفعلية من محرك WireGuard.
         }
     }
 }
