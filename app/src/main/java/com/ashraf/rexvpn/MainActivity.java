@@ -233,17 +233,34 @@ public class MainActivity extends Activity {
         header.setPadding(dp(16), dp(9), dp(16), dp(9));
         header.setBackgroundColor(BG);
 
-        LinearLayout brand = column();
+        
+        LinearLayout brand = row();
+        brand.setGravity(Gravity.CENTER_VERTICAL);
+
+        ImageView brandMark = new ImageView(this);
+        int logoId = getResources().getIdentifier(
+                "rex_logo", "drawable", getPackageName());
+
+        if (logoId != 0) {
+            brandMark.setImageResource(logoId);
+            brandMark.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            brand.addView(brandMark, lp(dp(48), dp(48)));
+        }
+
+        LinearLayout brandText = column();
+        brandText.setPadding(dp(9), 0, 0, 0);
 
         TextView logo = text("REX VPN", 25, CYAN, true);
         TextView tagline = text(
                 "POWER BEHIND THE SHADOW", 9, MUTED, true);
 
-        brand.addView(logo);
-        brand.addView(tagline);
+        brandText.addView(logo);
+        brandText.addView(tagline);
+        brand.addView(brandText);
 
         header.addView(
                 brand, new LinearLayout.LayoutParams(0, -2, 1));
+
 
         TextView menu = text("☰", 29, WHITE, true);
         menu.setGravity(Gravity.CENTER);
